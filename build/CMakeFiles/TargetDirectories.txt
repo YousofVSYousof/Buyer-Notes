@@ -1,0 +1,3 @@
+/home/raslanove/Desktop/Yousof/BuyerNotes/build/CMakeFiles/main.dir
+/home/raslanove/Desktop/Yousof/BuyerNotes/build/CMakeFiles/edit_cache.dir
+/home/raslanove/Desktop/Yousof/BuyerNotes/build/CMakeFiles/rebuild_cache.dir
