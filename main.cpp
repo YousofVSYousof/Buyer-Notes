@@ -3,6 +3,8 @@
 #include <sstream>
 #include <string>
 #include <ctime>
+#include <vector>
+#include <iomanip>
 
 // Nuklear / GLFW
 #define NK_INCLUDE_STANDARD_IO
@@ -129,6 +131,37 @@ double getAveragePrice(sqlite3 *db, string item, int days) {
 	return totalSpent / totalQuantity;
 }
 
+struct Purchase {
+	int id;
+	string name;
+	double quantity;
+	double price;
+	string date;
+	string type;
+};
+
+vector<Purchase> loadPurchases(sqlite3* db) {
+	vector<Purchase> purchases;
+	string command = "SELECT id, name, quantity, price, date, type FROM purchases ORDER BY date DESC;";
+	sqlite3_stmt* stmt;
+	
+	if (sqlite3_prepare_v2(db, command.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+		while (sqlite3_step(stmt) == SQLITE_ROW) {
+			Purchase p;
+			p.id = sqlite3_column_int(stmt, 0);
+			p.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+			p.quantity = sqlite3_column_double(stmt, 2);
+			p.price = sqlite3_column_double(stmt, 3);
+			p.date = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+			p.type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+			purchases.push_back(p);
+		}
+	}
+	sqlite3_finalize(stmt);
+	
+	return purchases;
+}
+
 int main() {
 	// Database Initialization
 	sqlite3 *db;
@@ -149,7 +182,7 @@ int main() {
 
 	// GLFW Initialization
 	glfwInit();
-	GLFWwindow* win = glfwCreateWindow(800, 600, "Nuklear Example", nullptr, nullptr);
+	GLFWwindow* win = glfwCreateWindow(1000, 600, "Buyer Notes", nullptr, nullptr);
 	glfwMakeContextCurrent(win);
 	glfwSwapInterval(1); // V-sync
 
@@ -161,19 +194,57 @@ int main() {
 	// Load fonts
 	struct nk_font_atlas *atlas;
 	nk_glfw3_font_stash_begin(&glfw, &atlas);
+	struct nk_font *bigFont = nk_font_atlas_add_default(atlas, 18.0f, nullptr);
 	nk_glfw3_font_stash_end(&glfw);
+	nk_style_set_font(&glfw.ctx, &bigFont->handle);
+
+	// Insert test data
+	insert(db, "apple", 5, 0.5);
+	insert(db, "apple", 2, 0.6);
+	insert(db, "orange", 1, 1.5);
 
 	// Main loop
 	while (!glfwWindowShouldClose(win)) {
+		// Poll events and start a new frame
 		glfwPollEvents();
 		nk_glfw3_new_frame(&glfw);
 
-		if (nk_begin(&glfw.ctx, "Simple Window", nk_rect(50, 50, 230, 150),
-			NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
-			NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
+		// Load purchases
+		vector<Purchase> purchases = loadPurchases(db);
 
-			nk_layout_row_static(&glfw.ctx, 30, 200, 1);
-			nk_label(&glfw.ctx, "Hello, Nuklear!", NK_TEXT_ALIGN_CENTERED);
+		// Purchases Window (Left Side)
+		if (nk_begin(&glfw.ctx, "Purchases", nk_rect(0, 0, 500, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
+			float widths[] = {0.2f, 0.15f, 0.15f, 0.15f, 0.35f};
+		
+			// Header row
+			nk_layout_row(&glfw.ctx, NK_DYNAMIC, 15, 5, widths);
+			nk_label(&glfw.ctx, "Name", NK_TEXT_LEFT);
+			nk_label(&glfw.ctx, "Type", NK_TEXT_LEFT);
+			nk_label(&glfw.ctx, "Qty", NK_TEXT_LEFT);
+			nk_label(&glfw.ctx, "Price", NK_TEXT_LEFT);
+			nk_label(&glfw.ctx, "Date", NK_TEXT_LEFT);
+		
+			// Data rows
+			for (const Purchase& p : purchases) {
+				nk_layout_row(&glfw.ctx, NK_DYNAMIC, 15, 5, widths);
+
+				nk_label(&glfw.ctx, p.name.c_str(), NK_TEXT_LEFT);
+				nk_label(&glfw.ctx, p.type.c_str(), NK_TEXT_LEFT);
+
+				nk_label(&glfw.ctx, (ostringstream() << fixed << setprecision(2) << p.quantity).str().c_str(), NK_TEXT_LEFT);
+
+				string priceStr = to_string(p.price);
+				nk_label(&glfw.ctx, (ostringstream() << fixed << setprecision(2) << p.price).str().c_str(), NK_TEXT_LEFT);
+
+				nk_label(&glfw.ctx, p.date.c_str(), NK_TEXT_LEFT);
+			}
+		}
+		nk_end(&glfw.ctx);
+		
+		// Properties Window (Right Side)
+		if (nk_begin(&glfw.ctx, "Properties", nk_rect(500, 0, 500, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
+			nk_layout_row_dynamic(&glfw.ctx, 25, 1);
+			nk_label(&glfw.ctx, "Properties go here.", NK_TEXT_LEFT);
 		}
 		nk_end(&glfw.ctx);
 
