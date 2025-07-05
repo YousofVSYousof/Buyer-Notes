@@ -47,6 +47,7 @@ int main() {
 
 	// GLFW Initialization
 	glfwInit();
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	GLFWwindow* win = glfwCreateWindow(1100, 600, "Buyer Notes", nullptr, nullptr);
 	glfwMakeContextCurrent(win);
 	glfwSwapInterval(1); // V-sync
@@ -82,7 +83,7 @@ int main() {
 		vector<Purchase> purchases = loadPurchases(db);
 
 		// Purchases Window (Left Side)
-		if (nk_begin(&glfw.ctx, "Purchases", nk_rect(0, 0, 600, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
+		if (nk_begin(&glfw.ctx, "Purchases", nk_rect(0, 0, 600, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE)) {
 			float widths[] = {0.2f, 0.15f, 0.1f, 0.15f, 0.2f, 0.2f};
 		
 			// Header row
@@ -140,7 +141,7 @@ int main() {
 		nk_end(&glfw.ctx);
 		
 		// Statistics Window (Right Side)
-		if (nk_begin(&glfw.ctx, "Statistics", nk_rect(600, 0, 500, 400), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
+		if (nk_begin(&glfw.ctx, "Statistics", nk_rect(600, 0, 500, 400), NK_WINDOW_BORDER | NK_WINDOW_TITLE)) {
 			nk_layout_row_dynamic(&glfw.ctx, 25, 1);
 		
 			double totalLastMonth = getTotalSpent(db, 30);
@@ -200,7 +201,7 @@ int main() {
 		static char quantityInput[32] = "";
 		static char priceInput[32] = "";
 		
-		if (nk_begin(&glfw.ctx, "Add New Item", nk_rect(600, 400, 500, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
+		if (nk_begin(&glfw.ctx, "Add New Item", nk_rect(600, 400, 500, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE)) {
 			static char nameInput[64] = "";
 			static char typeInput[64] = "";
 			static char quantityInput[32] = "";

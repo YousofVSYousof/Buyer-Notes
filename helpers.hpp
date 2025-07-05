@@ -69,7 +69,6 @@ void insert(sqlite3 *db, string name, double quantity, double price, string type
 			<< price << ", '"
 			<< getTimeStamp() << "', '"
 			<< type << "');";
-	cout << command.str() << endl;
 	runCommand(db, command.str());
 }
 
