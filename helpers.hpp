@@ -112,6 +112,21 @@ double getTotalSpent(sqlite3* db, int days) {
 	return totalSpent;
 }
 
+double getTotalSpent(sqlite3* db) {
+	string command = "SELECT SUM(quantity * price) FROM purchases;";
+	sqlite3_stmt* stmt;
+	double total = 0;
+
+	if (sqlite3_prepare_v2(db, command.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+		if (sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
+			total = sqlite3_column_double(stmt, 0);
+		}
+	}
+	sqlite3_finalize(stmt);
+	
+	return total;
+}
+
 double getAverageSpentPerDayLastMonth(sqlite3* db) {
 	stringstream query;
 	query << "SELECT AVG(daily_total) FROM ("
@@ -207,6 +222,12 @@ string formatDouble(double value, int precision = 2) {
 	ostringstream ss;
 	ss << fixed << setprecision(precision) << value;
 	return ss.str();
+}
+
+void deletePurchase(sqlite3 *db, int id) {
+	stringstream ss;
+	ss << "DELETE FROM purchases WHERE id = " << id << ";";
+	runCommand(db, ss.str());
 }
 
 #endif // HELPERS_HPP
