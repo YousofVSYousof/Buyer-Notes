@@ -176,4 +176,5 @@ CMakeFiles/main.dir/main.cpp.o: \
  /usr/include/string.h /usr/include/strings.h \
  /usr/include/x86_64-linux-gnu/bits/strings_fortified.h \
  /usr/include/x86_64-linux-gnu/bits/string_fortified.h \
- /usr/include/c++/11/stdlib.h /usr/include/assert.h
+ /usr/include/c++/11/stdlib.h /usr/include/assert.h \
+ /home/raslanove/Desktop/Yousof/BuyerNotes/helpers.hpp

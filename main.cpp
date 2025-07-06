@@ -22,150 +22,15 @@
 #define NK_GLFW_GL3_IMPLEMENTATION
 #include "nuklear_glfw_gl3.h"
 
+// Helper functions
+#include "helpers.hpp"
+
 using namespace std;
-
-void runCommand(sqlite3 *db, const char* inp) {
-	char *error = nullptr;
-	int rc = sqlite3_exec(db, inp, nullptr, nullptr, &error);
-	if (rc) {
-		cerr << "SQL error: " << error << endl;
-		exit(1);
-	}
-}
-
-void runCommand(sqlite3 *db, string inp) {
-	runCommand(db, inp.c_str());
-}
-
-string getDate() {
-    time_t now = time(nullptr);
-    tm *ltm = localtime(&now);
-    char buffer[11];
-    strftime(buffer, sizeof(buffer), "%Y-%m-%d", ltm);
-    return string(buffer);
-}
-
-void insert(sqlite3 *db, string name, double quantity, double price, string type = "") {
-	// If type is empty, look for existing type
-	if (type.empty()) {
-		stringstream query;
-		query << "SELECT type FROM purchases WHERE name = '" << name << "' LIMIT 1;";
-
-		sqlite3_stmt *stmt;
-		if (sqlite3_prepare_v2(db, query.str().c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
-			if (sqlite3_step(stmt) == SQLITE_ROW) {
-				const unsigned char *foundType = sqlite3_column_text(stmt, 0);
-				if (foundType) {
-					type = reinterpret_cast<const char*> (foundType);
-				}
-			}
-		}
-		sqlite3_finalize(stmt);
-
-		// If still empty, default to "food"
-		if (type.empty()) {
-			type = "food";
-		}
-	}
-
-	// Now insert with proper type
-	stringstream command;
-	command << "INSERT INTO purchases (name, quantity, price, date, type) VALUES ('"
-			<< name << "', "
-			<< quantity << ", "
-			<< price << ", '"
-			<< getDate() << "', '"
-			<< type << "');";
-	cout << command.str() << endl;
-	runCommand(db, command.str());
-}
-
-double getTotalSpent(sqlite3 *db, string item, int days) {
-	stringstream command;
-	command << "SELECT SUM(quantity * price) FROM purchases "
-			<< "WHERE name = '" << item << "' "
-			<< "AND date >= date('now', '-" << days << " day');";
-
-	sqlite3_stmt *stmt;
-	double totalSpent = 0;
-
-	sqlite3_prepare_v2(db, command.str().c_str(), -1, &stmt, nullptr);
-	sqlite3_step(stmt);
-
-	if (sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
-		totalSpent = sqlite3_column_double(stmt, 0);
-	}
-
-	sqlite3_finalize(stmt);
-	return totalSpent;
-}
-
-double getTotalQuantity(sqlite3 *db, string item, int days) {
-	stringstream command;
-	command << "SELECT SUM(quantity) FROM purchases "
-			<< "WHERE name = '" << item << "' "
-			<< "AND date >= date('now', '-" << days << " day');";
-
-	sqlite3_stmt *stmt;
-	double totalQuantity = 0;
-
-	sqlite3_prepare_v2(db, command.str().c_str(), -1, &stmt, nullptr);
-	sqlite3_step(stmt);
-
-	if (sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
-		totalQuantity = sqlite3_column_double(stmt, 0);
-	}
-
-	sqlite3_finalize(stmt);
-	return totalQuantity;
-}
-
-double getAveragePrice(sqlite3 *db, string item, int days) {
-	double totalSpent = getTotalSpent(db, item, days);
-	double totalQuantity = getTotalQuantity(db, item, days);
-
-	if (totalQuantity == 0) {
-		return 0;
-	}
-
-	return totalSpent / totalQuantity;
-}
-
-struct Purchase {
-	int id;
-	string name;
-	double quantity;
-	double price;
-	string date;
-	string type;
-};
-
-vector<Purchase> loadPurchases(sqlite3* db) {
-	vector<Purchase> purchases;
-	string command = "SELECT id, name, quantity, price, date, type FROM purchases ORDER BY date DESC;";
-	sqlite3_stmt* stmt;
-	
-	if (sqlite3_prepare_v2(db, command.c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
-		while (sqlite3_step(stmt) == SQLITE_ROW) {
-			Purchase p;
-			p.id = sqlite3_column_int(stmt, 0);
-			p.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-			p.quantity = sqlite3_column_double(stmt, 2);
-			p.price = sqlite3_column_double(stmt, 3);
-			p.date = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-			p.type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-			purchases.push_back(p);
-		}
-	}
-	sqlite3_finalize(stmt);
-	
-	return purchases;
-}
 
 int main() {
 	// Database Initialization
 	sqlite3 *db;
-	int rc = sqlite3_open("test.db", &db);
+	int rc = sqlite3_open("data.db", &db);
 	if (rc) {
 		cerr << "Can't open database: " << sqlite3_errmsg(db) << endl;
 		return 1;
@@ -176,13 +41,13 @@ int main() {
 	                    "name TEXT,"
 	                    "quantity REAL,"
 	                    "price REAL,"
-	                    "date TEXT,"
+	                    "timeStamp TEXT,"
 	                    "type TEXT"
 	                ");");
 
 	// GLFW Initialization
 	glfwInit();
-	GLFWwindow* win = glfwCreateWindow(1000, 600, "Buyer Notes", nullptr, nullptr);
+	GLFWwindow* win = glfwCreateWindow(1100, 600, "Buyer Notes", nullptr, nullptr);
 	glfwMakeContextCurrent(win);
 	glfwSwapInterval(1); // V-sync
 
@@ -213,38 +78,55 @@ int main() {
 		vector<Purchase> purchases = loadPurchases(db);
 
 		// Purchases Window (Left Side)
-		if (nk_begin(&glfw.ctx, "Purchases", nk_rect(0, 0, 500, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
-			float widths[] = {0.2f, 0.15f, 0.15f, 0.15f, 0.35f};
+		if (nk_begin(&glfw.ctx, "Purchases", nk_rect(0, 0, 600, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
+			float widths[] = {0.2f, 0.15f, 0.1f, 0.15f, 0.2f, 0.2f};
 		
 			// Header row
-			nk_layout_row(&glfw.ctx, NK_DYNAMIC, 15, 5, widths);
+			nk_layout_row(&glfw.ctx, NK_DYNAMIC, 15, 6, widths);
 			nk_label(&glfw.ctx, "Name", NK_TEXT_LEFT);
 			nk_label(&glfw.ctx, "Type", NK_TEXT_LEFT);
 			nk_label(&glfw.ctx, "Qty", NK_TEXT_LEFT);
 			nk_label(&glfw.ctx, "Price", NK_TEXT_LEFT);
 			nk_label(&glfw.ctx, "Date", NK_TEXT_LEFT);
-		
+			nk_label(&glfw.ctx, "Total", NK_TEXT_LEFT);
+			
 			// Data rows
-			for (const Purchase& p : purchases) {
-				nk_layout_row(&glfw.ctx, NK_DYNAMIC, 15, 5, widths);
-
+			for (size_t i = 0; i < purchases.size(); ++i) {
+				const Purchase& p = purchases[i];
+		
+				nk_layout_row(&glfw.ctx, NK_DYNAMIC, 25, 6, widths);
+				
 				nk_label(&glfw.ctx, p.name.c_str(), NK_TEXT_LEFT);
 				nk_label(&glfw.ctx, p.type.c_str(), NK_TEXT_LEFT);
-
-				nk_label(&glfw.ctx, (ostringstream() << fixed << setprecision(2) << p.quantity).str().c_str(), NK_TEXT_LEFT);
-
-				string priceStr = to_string(p.price);
-				nk_label(&glfw.ctx, (ostringstream() << fixed << setprecision(2) << p.price).str().c_str(), NK_TEXT_LEFT);
-
-				nk_label(&glfw.ctx, p.date.c_str(), NK_TEXT_LEFT);
+				nk_label(&glfw.ctx, formatDouble(p.quantity).c_str(), NK_TEXT_LEFT);
+				nk_label(&glfw.ctx, formatDouble(p.price).c_str(), NK_TEXT_LEFT);
+				nk_label(&glfw.ctx, p.timeStamp.substr(0, 10).c_str(), NK_TEXT_LEFT);
+		
+				// Show total only if this is the last purchase of that day
+				bool lastOfDay = (i == 0) || (p.timeStamp.substr(0, 10) != purchases[i - 1].timeStamp.substr(0, 10));
+				
+				if (lastOfDay) {
+					double total = getTotalSpentOnDate(db, p.timeStamp);
+					nk_label(&glfw.ctx, formatDouble(total).c_str(), NK_TEXT_LEFT);
+				} else {
+					nk_label(&glfw.ctx, "", NK_TEXT_LEFT);
+				}
 			}
 		}
 		nk_end(&glfw.ctx);
 		
-		// Properties Window (Right Side)
-		if (nk_begin(&glfw.ctx, "Properties", nk_rect(500, 0, 500, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
+		// Statistics Window (Right Side)
+		if (nk_begin(&glfw.ctx, "Statistics", nk_rect(600, 0, 500, 600), NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_SCALABLE)) {
 			nk_layout_row_dynamic(&glfw.ctx, 25, 1);
-			nk_label(&glfw.ctx, "Properties go here.", NK_TEXT_LEFT);
+		
+			double totalLastMonth = getTotalSpent(db, 30);
+			double avgPerDayLastMonth = getAverageSpentPerDayLastMonth(db);
+		
+			string totalStr = "Total spent last month: $" + formatDouble(totalLastMonth);
+			string avgStr = "Average spent per day last month: $" + formatDouble(avgPerDayLastMonth);
+		
+			nk_label(&glfw.ctx, totalStr.c_str(), NK_TEXT_LEFT);
+			nk_label(&glfw.ctx, avgStr.c_str(), NK_TEXT_LEFT);
 		}
 		nk_end(&glfw.ctx);
 
