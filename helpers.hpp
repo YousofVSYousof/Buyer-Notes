@@ -42,10 +42,10 @@ string getTimeStamp() {
 }
 
 void insert(sqlite3 *db, string name, double quantity, double price, string type = "") {
+	// Default type logic
 	if (type.empty()) {
 		stringstream query;
 		query << "SELECT type FROM purchases WHERE name = '" << name << "' LIMIT 1;";
-
 		sqlite3_stmt *stmt;
 		if (sqlite3_prepare_v2(db, query.str().c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
 			if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -62,6 +62,7 @@ void insert(sqlite3 *db, string name, double quantity, double price, string type
 		}
 	}
 
+	// Insert command
 	stringstream command;
 	command << "INSERT INTO purchases (name, quantity, price, timeStamp, type) VALUES ('"
 			<< name << "', "
@@ -227,6 +228,82 @@ void deletePurchase(sqlite3 *db, int id) {
 	stringstream ss;
 	ss << "DELETE FROM purchases WHERE id = " << id << ";";
 	runCommand(db, ss.str());
+}
+
+double getTotalSpentByType(sqlite3* db, const string& type, int days) {
+	stringstream command;
+	command << "SELECT SUM(quantity * price) FROM purchases "
+			<< "WHERE type = '" << type << "' "
+			<< "AND timeStamp >= date('now', '-" << days << " day');";
+
+	sqlite3_stmt* stmt;
+	double totalSpent = 0;
+
+	sqlite3_prepare_v2(db, command.str().c_str(), -1, &stmt, nullptr);
+	sqlite3_step(stmt);
+
+	if (sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
+		totalSpent = sqlite3_column_double(stmt, 0);
+	}
+
+	sqlite3_finalize(stmt);
+	return totalSpent;
+}
+
+double getTotalSpentOnExactDate(sqlite3* db, const string& date) {
+	stringstream command;
+	command << "SELECT SUM(quantity * price) FROM purchases "
+			<< "WHERE substr(timeStamp, 1, 10) = '" << date << "';";
+
+	sqlite3_stmt* stmt;
+	double totalSpent = 0;
+
+	sqlite3_prepare_v2(db, command.str().c_str(), -1, &stmt, nullptr);
+	sqlite3_step(stmt);
+
+	if (sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
+		totalSpent = sqlite3_column_double(stmt, 0);
+	}
+	sqlite3_finalize(stmt);
+
+	return totalSpent;
+}
+
+int getUniqueItemsOnDate(sqlite3* db, string date) {
+	stringstream command;
+	command << "SELECT COUNT(DISTINCT name) FROM purchases "
+			<< "WHERE substr(timeStamp, 1, 10) = '" << date << "';";
+
+	sqlite3_stmt* stmt;
+	int count = 0;
+
+	if (sqlite3_prepare_v2(db, command.str().c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+		if (sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
+			count = sqlite3_column_int(stmt, 0);
+		}
+	}
+	sqlite3_finalize(stmt);
+
+	return count;
+}
+
+int getUniqueItemsByTypeLast30Days(sqlite3* db, string type) {
+	stringstream command;
+	command << "SELECT COUNT(DISTINCT name) FROM purchases "
+			<< "WHERE type = '" << type << "' "
+			<< "AND timeStamp >= date('now', '-30 day');";
+
+	sqlite3_stmt* stmt;
+	int count = 0;
+
+	if (sqlite3_prepare_v2(db, command.str().c_str(), -1, &stmt, nullptr) == SQLITE_OK) {
+		if (sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
+			count = sqlite3_column_int(stmt, 0);
+		}
+	}
+	sqlite3_finalize(stmt);
+
+	return count;
 }
 
 #endif // HELPERS_HPP
